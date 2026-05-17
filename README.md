@@ -16,7 +16,7 @@ AI 기반 보안 특화 이메일 Agent `DailyMail`의 FastAPI 백엔드 초기 
 ## 실행
 
 ```bash
-cd backend
+cd DailyMail
 cp .env.example .env
 python3 -m venv .venv
 source .venv/bin/activate
@@ -66,4 +66,4 @@ python eval/run_email_eval.py --base-url http://127.0.0.1:8000
 
 평가 케이스는 `eval/email_cases.jsonl`에 한 줄 JSON 형식으로 추가합니다. 각 케이스는 기대 스팸 여부, 기대 위험도, 확률 범위를 가질 수 있고, `feedback` 배열을 넣으면 분석 전에 사용자 피드백을 먼저 저장해 RAG 반영 여부를 검증합니다.
 
-Codex에게 검증을 맡길 때 사용할 프롬프트 명령파일은 `eval/CODEX_HARNESS_PROMPT.md`에 있습니다.
+Codex에게 검증을 맡길 때 사용할 프롬프트 명령 파일은 `eval/CODEX_HARNESS_PROMPT.md`에 있습니다.
