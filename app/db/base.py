@@ -1,3 +1,3 @@
-from app.models.email import EmailMessage, UserSpamFeedback
+from app.models.email import EmailMessage, SpamKeyword, User
 
-__all__ = ["EmailMessage", "UserSpamFeedback"]
+__all__ = ["EmailMessage", "SpamKeyword", "User"]

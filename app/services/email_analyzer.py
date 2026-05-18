@@ -38,14 +38,11 @@ class EmailAnalyzer:
         threat_level = self._normalize_threat_level(ai_result["threat_level"])
 
         email = EmailMessage(
-            sender=str(payload.sender),
-            subject=payload.subject,
-            body=payload.body,
-            summary=summary,
-            ai_reason=ai_result["ai_reason"],
-            is_spam=ai_result["is_spam"],
+            content=self._format_mail_content(payload),
+            is_dark=ai_result["is_spam"],
+            dark_reason=ai_result["ai_reason"],
+            security_level=threat_level,
             spam_probability=ai_result["spam_probability"],
-            threat_level=ThreatLevel(threat_level),
         )
         self.db.add(email)
         self.db.commit()
@@ -62,6 +59,18 @@ class EmailAnalyzer:
             spam_probability=ai_result["spam_probability"],
             ai_reason=ai_result["ai_reason"],
             rag_context_count=len(relevant_feedback),
+        )
+
+    def _format_mail_content(self, payload: EmailAnalyzeRequest) -> str:
+        attachments = ", ".join(payload.attachment_names) if payload.attachment_names else "없음"
+        return "\n".join(
+            [
+                f"발신자: {payload.sender}",
+                f"제목: {payload.subject}",
+                f"첨부파일: {attachments}",
+                "본문:",
+                payload.body,
+            ]
         )
 
     def _extract_schedule_candidates(self, body: str) -> list[ScheduleCandidate]:

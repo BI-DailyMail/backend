@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 class EmailAnalyzeRequest(BaseModel):
@@ -40,14 +40,20 @@ class EmailAnalyzeResponse(BaseModel):
 
 
 class EmailFeedbackRequest(BaseModel):
-    email_message_id: int | None = None
-    sender: EmailStr
-    subject: str = Field(default="", max_length=500)
-    body_excerpt: str = Field(min_length=1, max_length=2000)
-    is_spam: bool
-    note: str | None = None
+    keyword: str = Field(min_length=1, max_length=255)
+    is_active: bool = True
+
+    @field_validator("keyword")
+    @classmethod
+    def normalize_keyword(cls, value: str) -> str:
+        normalized = " ".join(value.split())
+        if not normalized:
+            raise ValueError("keyword must not be blank")
+        return normalized
 
 
 class EmailFeedbackResponse(BaseModel):
     id: int
-    is_spam: bool
+    keyword: str
+    is_active: bool
+    created: bool

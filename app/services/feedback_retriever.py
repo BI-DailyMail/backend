@@ -1,8 +1,12 @@
-from sqlalchemy import or_, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.email import UserSpamFeedback
+from app.models.email import SpamKeyword
 from app.schemas.email import EmailAnalyzeRequest
+from app.services.security_baseline import SecurityBaselineRule, find_matching_baseline
+
+
+RagContextItem = SecurityBaselineRule | SpamKeyword
 
 
 class FeedbackRetriever:
@@ -11,32 +15,33 @@ class FeedbackRetriever:
 
     def find_relevant_feedback(
         self, payload: EmailAnalyzeRequest, limit: int = 5
-    ) -> list[UserSpamFeedback]:
-        sender_domain = payload.sender.split("@")[-1]
-        subject_terms = [term for term in payload.subject.split() if len(term) >= 2][:3]
+    ) -> list[RagContextItem]:
+        text = " ".join(
+            [payload.subject, payload.body, " ".join(payload.attachment_names)]
+        ).lower()
 
-        filters = [UserSpamFeedback.sender.ilike(f"%@{sender_domain}")]
-        filters.extend(UserSpamFeedback.subject.ilike(f"%{term}%") for term in subject_terms)
+        baseline_matches = find_matching_baseline(text)
 
-        stmt = (
-            select(UserSpamFeedback)
-            .where(or_(*filters))
-            .order_by(UserSpamFeedback.created_at.desc())
-            .limit(limit)
-        )
-        return list(self.db.scalars(stmt))
+        stmt = select(SpamKeyword).where(SpamKeyword.is_active.is_(True))
+        keywords = [
+            keyword
+            for keyword in self.db.scalars(stmt)
+            if keyword.keyword and keyword.keyword.lower() in text
+        ]
+        return [*baseline_matches, *keywords[:limit]]
 
-    def format_for_prompt(self, feedback_items: list[UserSpamFeedback]) -> str:
+    def format_for_prompt(self, feedback_items: list[RagContextItem]) -> str:
         if not feedback_items:
-            return "사용자 피드백 사례가 아직 없습니다."
+            return "기본 위험 기준 또는 사용자 추가 키워드와 일치하는 항목이 없습니다."
 
         lines = []
         for index, item in enumerate(feedback_items, start=1):
-            label = "스팸" if item.is_spam else "정상"
-            note = f" / 메모: {item.note}" if item.note else ""
-            lines.append(
-                f"{index}. 판정={label}, 발신자={item.sender}, 제목={item.subject}, "
-                f"본문 일부={item.body_excerpt[:300]}{note}"
-            )
+            if isinstance(item, SecurityBaselineRule):
+                signals = ", ".join(item.signals)
+                lines.append(
+                    f"{index}. 기본 위험 기준={item.category}, 위험도={item.risk}, "
+                    f"신호={signals}, 근거={item.reason}"
+                )
+            else:
+                lines.append(f"{index}. 사용자 추가 스팸 키워드={item.keyword}")
         return "\n".join(lines)
-

@@ -11,7 +11,7 @@ def test_gemini_client_falls_back_without_api_key(monkeypatch) -> None:
         subject="계정 확인",
         body="비밀번호와 인증번호를 즉시 입력하세요.",
         attachment_names=[],
-        feedback_context="사용자 피드백 사례가 아직 없습니다.",
+        feedback_context="기본 위험 기준 또는 사용자 추가 키워드와 일치하는 항목이 없습니다.",
     )
 
     assert result["is_spam"] is True
