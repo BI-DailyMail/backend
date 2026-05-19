@@ -45,7 +45,7 @@ class GeminiClient:
                             "spam_probability": {"type": "NUMBER"},
                             "threat_level": {
                                 "type": "STRING",
-                                "enum": ["safe", "suspicious", "dangerous"],
+                                "enum": ["safe", "warn", "danger"],
                             },
                             "ai_reason": {"type": "STRING"},
                             "security_findings": {
@@ -104,6 +104,7 @@ class GeminiClient:
 [판단 기준]
 - 기본 위험 기준 또는 사용자 추가 스팸 키워드와 유사하면 spam_probability를 높여라.
 - 계정 정보 요구, 긴급 송금, 링크 클릭 압박, 매크로 첨부파일, 발신자 도메인 이상 여부를 근거로 삼아라.
+- threat_level은 반드시 safe, warn, danger 중 하나만 사용하라.
 - 출력은 지정된 JSON 스키마만 사용하라.
 """.strip()
 
@@ -120,7 +121,7 @@ class GeminiClient:
             )
 
         spam_probability = max([finding.score for finding in findings], default=0.1)
-        threat_level = "dangerous" if spam_probability >= 0.8 else "suspicious" if findings else "safe"
+        threat_level = "danger" if spam_probability >= 0.8 else "warn" if findings else "safe"
         summary = " ".join(body.split())[:160]
 
         return {

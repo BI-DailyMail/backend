@@ -15,4 +15,4 @@ def test_gemini_client_falls_back_without_api_key(monkeypatch) -> None:
     )
 
     assert result["is_spam"] is True
-    assert result["threat_level"] == "dangerous"
+    assert result["threat_level"] == "danger"

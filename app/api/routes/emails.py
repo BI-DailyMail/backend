@@ -28,7 +28,7 @@ def list_problem_emails(db: Session = Depends(get_db)) -> list[EmailMessage]:
                 or_(
                     EmailMessage.is_dark.is_(True),
                     EmailMessage.security_level.in_(
-                        [ThreatLevel.suspicious.value, ThreatLevel.dangerous.value]
+                        [ThreatLevel.warn.value, ThreatLevel.danger.value]
                     ),
                 )
             )

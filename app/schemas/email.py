@@ -47,7 +47,9 @@ class EmailResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    content: str | None = None
+    sender: str | None = None
+    subject: str | None = None
+    body: str | None = None
     is_dark: bool | None = None
     dark_reason: str | None = None
     security_level: str | None = None

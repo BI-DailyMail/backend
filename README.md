@@ -58,7 +58,9 @@ Supabase에 이미 테이블이 만들어져 있으면 `AUTO_CREATE_TABLES=false
 ```text
 tb_mail
 - id
-- content
+- sender
+- subject
+- body
 - is_dark
 - dark_reason
 - security_level
@@ -89,6 +91,12 @@ tb_user
 - `GET /api/emails/problems`: 위험 메일 조회
 - `GET /api/security/rules`: Gemini API 키가 없을 때 쓰는 로컬 보조 규칙 확인
 
+`security_level`은 `safe`, `warn`, `danger` 세 단계로 저장합니다.
+
+- `safe`: 위험 신호가 거의 없는 정상 메일
+- `warn`: 의심 신호가 있어 사용자의 확인이 필요한 메일
+- `danger`: 피싱, 스팸, 정보 탈취 가능성이 높은 고위험 메일
+
 ## RAG 흐름
 
 DailyMail의 RAG는 벡터 DB 기반 검색이 아니라, Supabase에 저장된 유저별 활성 스팸 키워드를 검색해 Gemini 프롬프트에 주입하는 초기 RAG 구조입니다.
@@ -98,7 +106,7 @@ DailyMail의 RAG는 벡터 DB 기반 검색이 아니라, Supabase에 저장된 
 3. 백엔드는 메일 제목, 본문, 첨부파일명에서 기본 위험 기준과 해당 유저의 활성 키워드가 일치하는 항목을 검색합니다.
 4. 검색된 키워드를 Gemini 프롬프트의 근거 컨텍스트로 넣습니다.
 5. Gemini가 JSON 형식으로 `is_spam`, `spam_probability`, `threat_level`, 근거를 반환합니다.
-6. 분석 결과는 `tb_mail`에 저장됩니다.
+6. 분석 결과는 `tb_mail`에 저장됩니다. `sender`, `subject`, `body`를 분리 저장해 제목/본문 검색과 화면 표시에서 같은 데이터를 중복 관리하지 않도록 했습니다.
 
 사용자 키워드는 공백을 제거한 normalized 값으로 비교합니다. 예를 들어 `개인 정보`와 `개인정보`는 같은 키워드로 취급합니다.
 
@@ -131,13 +139,13 @@ DailyMail의 RAG는 벡터 DB 기반 검색이 아니라, Supabase에 저장된 
   {
     "category": "credential_theft",
     "signals": ["비밀번호", "인증번호", "계정 확인"],
-    "risk": "dangerous",
+    "risk": "danger",
     "reason": "인증 정보나 로그인 정보를 요구하는 메일은 계정 탈취 목적의 피싱 가능성이 높습니다."
   },
   {
     "category": "payment_fraud",
     "signals": ["긴급 송금", "계좌 변경", "입금"],
-    "risk": "dangerous",
+    "risk": "danger",
     "reason": "송금 압박이나 계좌 변경 요청은 BEC 또는 스피어피싱에서 자주 나타나는 패턴입니다."
   }
 ]

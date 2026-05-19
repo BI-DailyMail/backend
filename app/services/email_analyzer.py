@@ -38,7 +38,9 @@ class EmailAnalyzer:
         threat_level = self._normalize_threat_level(ai_result["threat_level"])
 
         email = EmailMessage(
-            content=self._format_mail_content(payload),
+            sender=str(payload.sender),
+            subject=payload.subject,
+            body=payload.body,
             is_dark=ai_result["is_spam"],
             dark_reason=ai_result["ai_reason"],
             security_level=threat_level,
@@ -61,18 +63,6 @@ class EmailAnalyzer:
             spam_probability=ai_result["spam_probability"],
             ai_reason=ai_result["ai_reason"],
             rag_context_count=len(relevant_context),
-        )
-
-    def _format_mail_content(self, payload: EmailAnalyzeRequest) -> str:
-        attachments = ", ".join(payload.attachment_names) if payload.attachment_names else "없음"
-        return "\n".join(
-            [
-                f"발신자: {payload.sender}",
-                f"제목: {payload.subject}",
-                f"첨부파일: {attachments}",
-                "본문:",
-                payload.body,
-            ]
         )
 
     def _extract_schedule_candidates(self, body: str) -> list[ScheduleCandidate]:
@@ -115,6 +105,11 @@ class EmailAnalyzer:
         return signals
 
     def _normalize_threat_level(self, value: str) -> str:
-        if value in {ThreatLevel.safe.value, ThreatLevel.suspicious.value, ThreatLevel.dangerous.value}:
-            return value
-        return ThreatLevel.suspicious.value
+        normalized = value.strip().lower()
+        if normalized in {ThreatLevel.safe.value, "low", "normal"}:
+            return ThreatLevel.safe.value
+        if normalized in {ThreatLevel.warn.value, "warning", "suspicious", "medium"}:
+            return ThreatLevel.warn.value
+        if normalized in {ThreatLevel.danger.value, "dangerous", "high", "critical"}:
+            return ThreatLevel.danger.value
+        return ThreatLevel.warn.value
