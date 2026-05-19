@@ -31,6 +31,7 @@ class EmailMessage(Base):
     sender: Mapped[str | None] = mapped_column(String, nullable=True)
     subject: Mapped[str | None] = mapped_column(String, nullable=True)
     body: Mapped[str | None] = mapped_column(Text, nullable=True)
+    received_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     is_dark: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     dark_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     security_level: Mapped[str | None] = mapped_column(String, nullable=True)

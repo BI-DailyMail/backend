@@ -9,6 +9,7 @@ class EmailAnalyzeRequest(BaseModel):
     subject: str = Field(default="", max_length=500)
     body: str = Field(min_length=1)
     attachment_names: list[str] = Field(default_factory=list)
+    received_at: datetime | None = None
 
 
 class ScheduleCandidate(BaseModel):
@@ -50,6 +51,7 @@ class EmailResponse(BaseModel):
     sender: str | None = None
     subject: str | None = None
     body: str | None = None
+    received_at: datetime | None = None
     is_dark: bool | None = None
     dark_reason: str | None = None
     security_level: str | None = None

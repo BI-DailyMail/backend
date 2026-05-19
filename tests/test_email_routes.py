@@ -1,4 +1,5 @@
 from collections.abc import Generator
+from datetime import datetime, timedelta, timezone
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -9,6 +10,7 @@ from app.db.session import Base, get_db
 from app.main import app
 from app.models.email import EmailMessage, SpamKeyword, ThreatLevel, User
 from app.schemas.email import EmailAnalyzeRequest
+from app.services.email_analyzer import EmailAnalyzer
 from app.services.rag_context_retriever import RagContextRetriever
 
 
@@ -53,6 +55,7 @@ def test_list_emails_and_problem_emails() -> None:
                     sender="notice@example.com",
                     subject="주의 메일",
                     body="warn mail body",
+                    received_at=datetime(2026, 1, 10, tzinfo=timezone.utc),
                     is_dark=False,
                     security_level=ThreatLevel.warn.value,
                     spam_probability=0.6,
@@ -76,6 +79,7 @@ def test_list_emails_and_problem_emails() -> None:
         assert emails[0]["sender"] == "notice@example.com"
         assert emails[0]["subject"] == "주의 메일"
         assert emails[0]["body"] == "warn mail body"
+        assert emails[0]["received_at"] is not None
 
         response = client.get("/api/emails/problems")
         assert response.status_code == 200
@@ -187,3 +191,31 @@ def test_rag_context_matches_keywords_ignoring_spaces() -> None:
 
     keywords = [item.keyword for item in context if isinstance(item, SpamKeyword)]
     assert keywords == ["개인 정보"]
+
+
+def test_dark_data_detects_stale_mail_and_sensitive_patterns_without_leaking_values() -> None:
+    analyzer = EmailAnalyzer.__new__(EmailAnalyzer)
+    payload = EmailAnalyzeRequest(
+        user_id=1,
+        sender="sender@example.com",
+        subject="오래된 문서 확인",
+        body=(
+            "주민등록번호 900101-1234567, 카드번호 4111 1111 1111 1111, "
+            "계좌 123-456-789012, 인증번호 123456을 포함합니다."
+        ),
+        attachment_names=[],
+        received_at=datetime.now(timezone.utc) - timedelta(days=400),
+    )
+
+    signals = analyzer._discover_dark_data(payload)
+
+    labels = {signal.label for signal in signals}
+    assert "stale_mail_retention" in labels
+    assert "resident_registration_number" in labels
+    assert "card_number" in labels
+    assert "bank_account_number" in labels
+    assert "verification_code" in labels
+    details = " ".join(signal.detail for signal in signals)
+    assert "900101-1234567" not in details
+    assert "4111 1111 1111 1111" not in details
+    assert "123-456-789012" not in details

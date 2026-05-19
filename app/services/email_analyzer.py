@@ -1,3 +1,6 @@
+import re
+from datetime import datetime, timezone
+
 from sqlalchemy.orm import Session
 
 from app.models.email import EmailMessage, ThreatLevel
@@ -10,6 +13,9 @@ from app.schemas.email import (
 )
 from app.services.gemini_client import GeminiClient
 from app.services.rag_context_retriever import RagContextRetriever
+
+
+STALE_MAIL_DAYS = 365
 
 
 class EmailAnalyzer:
@@ -41,6 +47,7 @@ class EmailAnalyzer:
             sender=str(payload.sender),
             subject=payload.subject,
             body=payload.body,
+            received_at=payload.received_at,
             is_dark=ai_result["is_spam"],
             dark_reason=ai_result["ai_reason"],
             security_level=threat_level,
@@ -80,6 +87,9 @@ class EmailAnalyzer:
 
     def _discover_dark_data(self, payload: EmailAnalyzeRequest) -> list[DarkDataSignal]:
         signals: list[DarkDataSignal] = []
+        signals.extend(self._discover_stale_mail(payload))
+        signals.extend(self._discover_sensitive_data(payload))
+
         duplicated_names = {
             name for name in payload.attachment_names if payload.attachment_names.count(name) > 1
         }
@@ -103,6 +113,98 @@ class EmailAnalyzer:
                     )
                 )
         return signals
+
+    def _discover_stale_mail(self, payload: EmailAnalyzeRequest) -> list[DarkDataSignal]:
+        if payload.received_at is None:
+            return []
+
+        received_at = self._as_aware_datetime(payload.received_at)
+        age_days = (datetime.now(timezone.utc) - received_at).days
+        if age_days < STALE_MAIL_DAYS:
+            return []
+
+        severity = "high" if age_days >= STALE_MAIL_DAYS * 3 else "medium"
+        return [
+            DarkDataSignal(
+                label="stale_mail_retention",
+                detail=f"{age_days}일 전에 수신된 장기 보관 메일입니다.",
+                severity=severity,
+            )
+        ]
+
+    def _discover_sensitive_data(self, payload: EmailAnalyzeRequest) -> list[DarkDataSignal]:
+        text = f"{payload.subject}\n{payload.body}"
+        signals: list[DarkDataSignal] = []
+
+        if re.search(r"(?<!\d)\d{6}[- ]?[1-8]\d{6}(?!\d)", text):
+            signals.append(
+                DarkDataSignal(
+                    label="resident_registration_number",
+                    detail="주민등록번호 형식의 민감정보 패턴이 감지되었습니다.",
+                    severity="high",
+                )
+            )
+
+        if self._contains_card_number(text):
+            signals.append(
+                DarkDataSignal(
+                    label="card_number",
+                    detail="카드번호 형식의 민감정보 패턴이 감지되었습니다.",
+                    severity="high",
+                )
+            )
+
+        if re.search(
+            r"(계좌|입금|송금|account|bank)[^\n]{0,40}(?<!\d)\d{2,6}[- ]?\d{2,6}[- ]?\d{2,8}(?!\d)",
+            text,
+            re.IGNORECASE,
+        ):
+            signals.append(
+                DarkDataSignal(
+                    label="bank_account_number",
+                    detail="계좌번호로 보이는 금융정보 패턴이 감지되었습니다.",
+                    severity="medium",
+                )
+            )
+
+        if re.search(
+            r"(인증번호|보안코드|otp|2fa|mfa|verification code|security code)[^\n]{0,40}(?<!\d)\d{4,8}(?!\d)",
+            text,
+            re.IGNORECASE,
+        ):
+            signals.append(
+                DarkDataSignal(
+                    label="verification_code",
+                    detail="인증번호 또는 보안코드 형식의 민감정보 패턴이 감지되었습니다.",
+                    severity="high",
+                )
+            )
+
+        return signals
+
+    def _contains_card_number(self, text: str) -> bool:
+        for match in re.finditer(r"(?<!\d)(?:\d[ -]?){13,19}(?!\d)", text):
+            digits = re.sub(r"\D", "", match.group())
+            if 13 <= len(digits) <= 19 and self._passes_luhn(digits):
+                return True
+        return False
+
+    def _passes_luhn(self, digits: str) -> bool:
+        checksum = 0
+        reverse_digits = digits[::-1]
+        for index, char in enumerate(reverse_digits):
+            value = int(char)
+            if index % 2 == 1:
+                value *= 2
+                if value > 9:
+                    value -= 9
+            checksum += value
+        return checksum % 10 == 0
+
+    def _as_aware_datetime(self, value: datetime) -> datetime:
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
 
     def _normalize_threat_level(self, value: str) -> str:
         normalized = value.strip().lower()
