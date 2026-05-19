@@ -5,6 +5,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.core.config import settings
 from app.db.session import Base, get_db
 from app.main import app
 from app.models.email import EmailMessage, SpamKeyword, ThreatLevel, User
@@ -70,6 +71,53 @@ def test_list_emails_and_problem_emails() -> None:
         response = client.get("/api/emails/problems")
         assert response.status_code == 200
         assert [email["id"] for email in response.json()] == [3, 2]
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_analyze_email_saves_result(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "gemini_api_key", "")
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    TestingSessionLocal = sessionmaker(
+        bind=engine, autoflush=False, autocommit=False, expire_on_commit=False
+    )
+    Base.metadata.create_all(bind=engine)
+
+    with TestingSessionLocal() as db:
+        db.add(User(id=1, email="user1@example.com", name="User 1"))
+        db.commit()
+
+    def override_get_db() -> Generator[Session, None, None]:
+        with TestingSessionLocal() as db:
+            yield db
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        client = TestClient(app)
+        response = client.post(
+            "/api/emails/analyze",
+            json={
+                "user_id": 1,
+                "sender": "security@fake-bank.example",
+                "subject": "긴급 계정 확인 요청",
+                "body": "비밀번호와 인증번호를 즉시 입력하세요.",
+                "attachment_names": [],
+            },
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["email_id"] == 1
+        assert body["user_id"] == 1
+        assert body["is_spam"] is True
+
+        response = client.get("/api/emails")
+        assert response.status_code == 200
+        assert response.json()[0]["id"] == body["email_id"]
     finally:
         app.dependency_overrides.clear()
 
