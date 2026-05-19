@@ -19,7 +19,7 @@ class GeminiClient:
         subject: str,
         body: str,
         attachment_names: list[str],
-        feedback_context: str,
+        rag_context: str,
     ) -> dict[str, Any]:
         if self._client is None:
             return self._fallback_analysis(subject=subject, body=body)
@@ -29,7 +29,7 @@ class GeminiClient:
             subject=subject,
             body=body,
             attachment_names=attachment_names,
-            feedback_context=feedback_context,
+            rag_context=rag_context,
         )
         try:
             response = self._client.models.generate_content(
@@ -83,7 +83,7 @@ class GeminiClient:
         subject: str,
         body: str,
         attachment_names: list[str],
-        feedback_context: str,
+        rag_context: str,
     ) -> str:
         attachments = ", ".join(attachment_names) if attachment_names else "없음"
         return f"""
@@ -92,7 +92,7 @@ class GeminiClient:
 반드시 기본 위험 기준과 사용자 추가 키워드 컨텍스트를 먼저 참고하되, 사례가 부족하면 메일 내용 자체의 보안 위험을 분석하라.
 
 [기본 기준 및 사용자 키워드 RAG 컨텍스트]
-{feedback_context}
+{rag_context}
 
 [분석 대상 메일]
 발신자: {sender}

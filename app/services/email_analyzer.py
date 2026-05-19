@@ -8,25 +8,25 @@ from app.schemas.email import (
     ScheduleCandidate,
     SecurityFinding,
 )
-from app.services.feedback_retriever import FeedbackRetriever
 from app.services.gemini_client import GeminiClient
+from app.services.rag_context_retriever import RagContextRetriever
 
 
 class EmailAnalyzer:
     def __init__(self, db: Session) -> None:
         self.db = db
-        self.feedback_retriever = FeedbackRetriever(db)
+        self.rag_context_retriever = RagContextRetriever(db)
         self.gemini_client = GeminiClient()
 
     def analyze(self, payload: EmailAnalyzeRequest) -> EmailAnalyzeResponse:
-        relevant_feedback = self.feedback_retriever.find_relevant_feedback(payload)
-        feedback_context = self.feedback_retriever.format_for_prompt(relevant_feedback)
+        relevant_context = self.rag_context_retriever.find_relevant_context(payload)
+        rag_context = self.rag_context_retriever.format_for_prompt(relevant_context)
         ai_result = self.gemini_client.analyze_email(
             sender=str(payload.sender),
             subject=payload.subject,
             body=payload.body,
             attachment_names=payload.attachment_names,
-            feedback_context=feedback_context,
+            rag_context=rag_context,
         )
 
         summary = ai_result["summary"]
@@ -43,6 +43,7 @@ class EmailAnalyzer:
             dark_reason=ai_result["ai_reason"],
             security_level=threat_level,
             spam_probability=ai_result["spam_probability"],
+            user_id=payload.user_id,
         )
         self.db.add(email)
         self.db.commit()
@@ -50,6 +51,7 @@ class EmailAnalyzer:
 
         return EmailAnalyzeResponse(
             email_id=email.id,
+            user_id=payload.user_id,
             summary=summary,
             schedule_candidates=schedule_candidates,
             dark_data_signals=dark_data_signals,
@@ -58,7 +60,7 @@ class EmailAnalyzer:
             is_spam=ai_result["is_spam"],
             spam_probability=ai_result["spam_probability"],
             ai_reason=ai_result["ai_reason"],
-            rag_context_count=len(relevant_feedback),
+            rag_context_count=len(relevant_context),
         )
 
     def _format_mail_content(self, payload: EmailAnalyzeRequest) -> str:

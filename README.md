@@ -68,7 +68,9 @@ tb_mail
 
 tb_spam_keywords
 - id
+- user_id
 - keyword
+- keyword_normalized
 - is_active
 - created_at
 
@@ -82,25 +84,27 @@ tb_user
 ## 주요 엔드포인트
 
 - `GET /health`: 서버 상태 확인
-- `POST /api/emails/analyze`: 스팸 키워드 RAG + Gemini 기반 이메일 분석
-- `POST /api/feedback`: 사용자가 추가한 스팸 키워드 저장 또는 활성 상태 갱신
+- `POST /api/emails/analyze`: 유저별 스팸 키워드 RAG + Gemini 기반 이메일 분석
+- `GET /api/emails`: 저장된 전체 메일 조회
+- `GET /api/emails/problems`: 위험 메일 조회
 - `GET /api/security/rules`: Gemini API 키가 없을 때 쓰는 로컬 보조 규칙 확인
 
 ## RAG 흐름
 
-DailyMail의 RAG는 벡터 DB 기반 검색이 아니라, Supabase에 저장된 활성 스팸 키워드를 검색해 Gemini 프롬프트에 주입하는 초기 RAG 구조입니다.
+DailyMail의 RAG는 벡터 DB 기반 검색이 아니라, Supabase에 저장된 유저별 활성 스팸 키워드를 검색해 Gemini 프롬프트에 주입하는 초기 RAG 구조입니다.
 
 1. 서비스가 `app/data/security_baseline.json`에 기본 위험 기준을 가지고 있습니다.
-2. 사용자가 메일 분석을 요청합니다.
-3. 백엔드는 메일 제목, 본문, 첨부파일명에서 기본 위험 기준과 활성 키워드가 일치하는 항목을 검색합니다.
+2. 사용자가 `user_id`와 함께 메일 분석을 요청합니다.
+3. 백엔드는 메일 제목, 본문, 첨부파일명에서 기본 위험 기준과 해당 유저의 활성 키워드가 일치하는 항목을 검색합니다.
 4. 검색된 키워드를 Gemini 프롬프트의 근거 컨텍스트로 넣습니다.
 5. Gemini가 JSON 형식으로 `is_spam`, `spam_probability`, `threat_level`, 근거를 반환합니다.
 6. 분석 결과는 `tb_mail`에 저장됩니다.
-7. 사용자가 스팸 키워드를 보내면 `/feedback`을 통해 `tb_spam_keywords`에 저장되고 이후 분석의 RAG 컨텍스트로 사용됩니다. 이미 존재하는 키워드면 새 row를 만들지 않고 활성 상태만 갱신합니다.
+
+사용자 키워드는 공백을 제거한 normalized 값으로 비교합니다. 예를 들어 `개인 정보`와 `개인정보`는 같은 키워드로 취급합니다.
 
 ## 초기 RAG 기준 데이터
 
-사용자 피드백이 쌓이기 전에도 Gemini가 참고할 기준 데이터가 필요합니다. 그래서 기본 피싱/스팸 패턴은 `app/data/security_baseline.json`에 파일로 관리하고, 사용자가 추가한 키워드는 `tb_spam_keywords`에 저장합니다.
+사용자 피드백이 쌓이기 전에도 Gemini가 참고할 기준 데이터가 필요합니다. 그래서 기본 피싱/스팸 패턴은 `app/data/security_baseline.json`에 파일로 관리하고, 사용자가 추가한 키워드는 `tb_spam_keywords`에 `user_id`와 함께 저장합니다.
 이 baseline은 90% 이상 탐지를 목표로 넓은 위험 신호를 커버하되, 실제 탐지율은 `eval/email_cases.jsonl` 같은 대표 케이스셋으로 반복 측정합니다.
 
 현재 baseline은 다음 범주를 포함합니다.
@@ -150,8 +154,8 @@ uvicorn app.main:app --reload
 python eval/run_email_eval.py --base-url http://127.0.0.1:8000
 ```
 
-평가 케이스는 `eval/email_cases.jsonl`에 한 줄 JSON 형식으로 추가합니다. 각 케이스는 기대 스팸 여부, 기대 위험도, 확률 범위를 가질 수 있고, `feedback` 배열을 넣으면 분석 전에 사용자 피드백을 먼저 저장해 RAG 반영 여부를 검증합니다.
+평가 케이스는 `eval/email_cases.jsonl`에 한 줄 JSON 형식으로 추가합니다. 각 케이스는 기대 스팸 여부, 기대 위험도, 확률 범위를 가질 수 있습니다.
 
-현재 하네스는 실제 DB에 피드백 키워드를 저장합니다. 동일 키워드는 중복 row를 만들지 않고 활성 상태만 갱신하지만, 평가 전용 키워드가 운영 데이터에 남을 수 있으므로 정식 회귀 테스트로 확장할 때는 테스트 전용 DB나 cleanup 전략을 추가하는 것을 권장합니다.
+현재 하네스는 분석 결과를 실제 DB에 저장합니다. 정식 회귀 테스트로 확장할 때는 테스트 전용 DB나 cleanup 전략을 추가하는 것을 권장합니다.
 
 Codex에게 검증을 맡길 때 사용할 프롬프트 명령 파일은 `eval/CODEX_HARNESS_PROMPT.md`에 있습니다.

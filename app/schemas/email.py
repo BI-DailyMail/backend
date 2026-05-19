@@ -1,7 +1,10 @@
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 class EmailAnalyzeRequest(BaseModel):
+    user_id: int = Field(gt=0)
     sender: EmailStr
     subject: str = Field(default="", max_length=500)
     body: str = Field(min_length=1)
@@ -28,6 +31,7 @@ class SecurityFinding(BaseModel):
 
 class EmailAnalyzeResponse(BaseModel):
     email_id: int | None = None
+    user_id: int
     summary: str
     schedule_candidates: list[ScheduleCandidate]
     dark_data_signals: list[DarkDataSignal]
@@ -39,21 +43,14 @@ class EmailAnalyzeResponse(BaseModel):
     rag_context_count: int
 
 
-class EmailFeedbackRequest(BaseModel):
-    keyword: str = Field(min_length=1, max_length=255)
-    is_active: bool = True
+class EmailResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
 
-    @field_validator("keyword")
-    @classmethod
-    def normalize_keyword(cls, value: str) -> str:
-        normalized = " ".join(value.split())
-        if not normalized:
-            raise ValueError("keyword must not be blank")
-        return normalized
-
-
-class EmailFeedbackResponse(BaseModel):
     id: int
-    keyword: str
-    is_active: bool
-    created: bool
+    content: str | None = None
+    is_dark: bool | None = None
+    dark_reason: str | None = None
+    security_level: str | None = None
+    spam_probability: float | None = None
+    user_id: int | None = None
+    created_at: datetime

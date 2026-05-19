@@ -53,13 +53,9 @@ def post_json(url: str, payload: dict[str, Any], timeout: float) -> dict[str, An
         return json.loads(response.read().decode("utf-8"))
 
 
-def seed_feedback(base_url: str, case: dict[str, Any], timeout: float) -> None:
-    for feedback in case.get("feedback", []):
-        post_json(f"{base_url}/api/feedback", feedback, timeout)
-
-
 def analyze_case(base_url: str, case: dict[str, Any], timeout: float) -> dict[str, Any]:
     payload = {
+        "user_id": case.get("user_id", 1),
         "sender": case["sender"],
         "subject": case.get("subject", ""),
         "body": case["body"],
@@ -119,7 +115,6 @@ def run_eval(base_url: str, cases_path: Path, timeout: float) -> list[EvalResult
     results: list[EvalResult] = []
 
     for case in cases:
-        seed_feedback(base_url, case, timeout)
         actual = analyze_case(base_url, case, timeout)
         results.append(evaluate_case(case, actual))
 

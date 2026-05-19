@@ -6,6 +6,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+from app.services.text_normalizer import normalize_keyword
+
 
 BASELINE_PATH = Path(__file__).resolve().parents[1] / "data" / "security_baseline.json"
 
@@ -39,9 +41,9 @@ def load_security_baseline() -> tuple[SecurityBaselineRule, ...]:
 
 
 def find_matching_baseline(text: str) -> list[SecurityBaselineRule]:
-    normalized = text.lower()
+    normalized = normalize_keyword(text)
     return [
         rule
         for rule in load_security_baseline()
-        if any(signal.lower() in normalized for signal in rule.signals)
+        if any(normalize_keyword(signal) in normalized for signal in rule.signals)
     ]
