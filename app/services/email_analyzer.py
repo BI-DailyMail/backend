@@ -8,11 +8,14 @@ from app.schemas.email import (
     DarkDataSignal,
     EmailAnalyzeRequest,
     EmailAnalyzeResponse,
+    EmailBodyAnalyzeRequest,
+    EmailBodyAnalyzeResponse,
     ScheduleCandidate,
     SecurityFinding,
 )
 from app.services.gemini_client import GeminiClient
 from app.services.rag_context_retriever import RagContextRetriever
+from app.services.security_baseline import find_matching_baseline
 
 
 STALE_MAIL_DAYS = 365
@@ -64,6 +67,41 @@ class EmailAnalyzer:
             summary=summary,
             schedule_candidates=schedule_candidates,
             dark_data_signals=dark_data_signals,
+            security_findings=security_findings,
+            threat_level=threat_level,
+            is_spam=ai_result["is_spam"],
+            spam_probability=ai_result["spam_probability"],
+            ai_reason=ai_result["ai_reason"],
+            rag_context_count=len(relevant_context),
+        )
+
+    def analyze_body(self, payload: EmailBodyAnalyzeRequest) -> EmailBodyAnalyzeResponse:
+        relevant_context = find_matching_baseline(payload.body)
+        rag_context = self.rag_context_retriever.format_for_prompt(relevant_context)
+        ai_result = self.gemini_client.analyze_email(
+            sender="unknown@example.com",
+            subject="",
+            body=payload.body,
+            attachment_names=[],
+            rag_context=rag_context,
+        )
+
+        security_findings = [
+            SecurityFinding(**finding) for finding in ai_result.get("security_findings", [])
+        ]
+        threat_level = self._normalize_threat_level(ai_result["threat_level"])
+        dark_data_payload = EmailAnalyzeRequest(
+            user_id=1,
+            sender="unknown@example.com",
+            subject="",
+            body=payload.body,
+            attachment_names=[],
+        )
+
+        return EmailBodyAnalyzeResponse(
+            summary=ai_result["summary"],
+            schedule_candidates=self._extract_schedule_candidates(payload.body),
+            dark_data_signals=self._discover_dark_data(dark_data_payload),
             security_findings=security_findings,
             threat_level=threat_level,
             is_spam=ai_result["is_spam"],

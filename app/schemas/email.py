@@ -12,6 +12,10 @@ class EmailAnalyzeRequest(BaseModel):
     received_at: datetime | None = None
 
 
+class EmailBodyAnalyzeRequest(BaseModel):
+    body: str = Field(min_length=1)
+
+
 class ScheduleCandidate(BaseModel):
     title: str
     date_text: str
@@ -33,6 +37,18 @@ class SecurityFinding(BaseModel):
 class EmailAnalyzeResponse(BaseModel):
     email_id: int | None = None
     user_id: int
+    summary: str
+    schedule_candidates: list[ScheduleCandidate]
+    dark_data_signals: list[DarkDataSignal]
+    security_findings: list[SecurityFinding]
+    threat_level: str
+    is_spam: bool
+    spam_probability: float = Field(ge=0, le=1)
+    ai_reason: str
+    rag_context_count: int
+
+
+class EmailBodyAnalyzeResponse(BaseModel):
     summary: str
     schedule_candidates: list[ScheduleCandidate]
     dark_data_signals: list[DarkDataSignal]

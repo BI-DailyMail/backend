@@ -2,7 +2,7 @@ from collections.abc import Generator
 from datetime import datetime, timedelta, timezone
 
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -11,6 +11,7 @@ from app.main import app
 from app.models.email import EmailMessage, SpamKeyword, ThreatLevel, User
 from app.schemas.email import EmailAnalyzeRequest
 from app.services.email_analyzer import EmailAnalyzer
+from app.services.gemini_client import GeminiClient
 from app.services.rag_context_retriever import RagContextRetriever
 
 
@@ -94,6 +95,146 @@ def test_feedback_route_is_removed() -> None:
     response = client.post("/api/feedback", json={"keyword": "test", "is_active": True})
 
     assert response.status_code == 404
+
+
+def test_batch_analyze_accepts_email_list_and_saves_each_email(monkeypatch) -> None:
+    def fake_analyze_email(
+        self,
+        *,
+        sender: str,
+        subject: str,
+        body: str,
+        attachment_names: list[str],
+        rag_context: str,
+    ) -> dict:
+        return {
+            "summary": body,
+            "is_spam": "비밀번호" in body,
+            "spam_probability": 0.9 if "비밀번호" in body else 0.1,
+            "threat_level": "danger" if "비밀번호" in body else "safe",
+            "ai_reason": "테스트 분석 결과입니다.",
+            "security_findings": [],
+        }
+
+    monkeypatch.setattr(GeminiClient, "analyze_email", fake_analyze_email)
+
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    TestingSessionLocal = sessionmaker(
+        bind=engine, autoflush=False, autocommit=False, expire_on_commit=False
+    )
+    Base.metadata.create_all(bind=engine)
+
+    with TestingSessionLocal() as db:
+        db.add(User(id=1, email="user1@example.com", name="User 1"))
+        db.commit()
+
+    def override_get_db() -> Generator[Session, None, None]:
+        with TestingSessionLocal() as db:
+            yield db
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        client = TestClient(app)
+        response = client.post(
+            "/api/emails/analyze/batch",
+            json=[
+                {
+                    "user_id": 1,
+                    "sender": "safe@example.com",
+                    "subject": "안내",
+                    "body": "정상 안내 메일입니다.",
+                },
+                {
+                    "user_id": 1,
+                    "sender": "risk@example.com",
+                    "subject": "계정 확인",
+                    "body": "비밀번호를 즉시 입력해주세요.",
+                    "received_at": "2024-01-10T09:30:00Z",
+                },
+            ],
+        )
+
+        assert response.status_code == 200
+        results = response.json()
+        assert len(results) == 2
+        assert [result["threat_level"] for result in results] == ["safe", "danger"]
+
+        with TestingSessionLocal() as db:
+            saved = list(db.scalars(select(EmailMessage).order_by(EmailMessage.id)))
+        assert len(saved) == 2
+        assert saved[0].subject == "안내"
+        assert saved[1].received_at is not None
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_body_only_analyze_returns_result_without_saving_email(monkeypatch) -> None:
+    def fake_analyze_email(
+        self,
+        *,
+        sender: str,
+        subject: str,
+        body: str,
+        attachment_names: list[str],
+        rag_context: str,
+    ) -> dict:
+        return {
+            "summary": body,
+            "is_spam": True,
+            "spam_probability": 0.88,
+            "threat_level": "danger",
+            "ai_reason": "본문만 분석했습니다.",
+            "security_findings": [
+                {
+                    "label": "credential_request",
+                    "reason": "비밀번호 입력 요구",
+                    "score": 0.88,
+                }
+            ],
+        }
+
+    monkeypatch.setattr(GeminiClient, "analyze_email", fake_analyze_email)
+
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    TestingSessionLocal = sessionmaker(
+        bind=engine, autoflush=False, autocommit=False, expire_on_commit=False
+    )
+    Base.metadata.create_all(bind=engine)
+
+    def override_get_db() -> Generator[Session, None, None]:
+        with TestingSessionLocal() as db:
+            yield db
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        client = TestClient(app)
+        response = client.post(
+            "/api/emails/analyze/body",
+            json={"body": "비밀번호와 인증번호 123456을 즉시 입력하세요."},
+        )
+
+        assert response.status_code == 200
+        result = response.json()
+        assert result["threat_level"] == "danger"
+        assert result["is_spam"] is True
+        assert result["rag_context_count"] >= 1
+        assert any(
+            signal["label"] == "verification_code" for signal in result["dark_data_signals"]
+        )
+
+        with TestingSessionLocal() as db:
+            saved = list(db.scalars(select(EmailMessage)))
+        assert saved == []
+    finally:
+        app.dependency_overrides.clear()
 
 
 def test_rag_context_uses_only_current_user_keywords() -> None:

@@ -88,6 +88,8 @@ tb_user
 
 - `GET /health`: 서버 상태 확인
 - `POST /api/emails/analyze`: 유저별 스팸 키워드 RAG + Gemini 기반 이메일 분석
+- `POST /api/emails/analyze/batch`: 메일 목록을 한 번에 분석하고 각 결과를 저장
+- `POST /api/emails/analyze/body`: 본문만 빠르게 분석하고 DB에는 저장하지 않는 미리보기 분석
 - `GET /api/emails`: 저장된 전체 메일 조회
 - `GET /api/emails/problems`: 위험 메일 조회
 - `GET /api/security/rules`: Gemini API 키가 없을 때 쓰는 로컬 보조 규칙 확인

@@ -27,7 +27,9 @@ class ThreatLevel(StrEnum):
 class EmailMessage(Base):
     __tablename__ = "tb_mail"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, index=True)
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer(), "sqlite"), primary_key=True, index=True
+    )
     sender: Mapped[str | None] = mapped_column(String, nullable=True)
     subject: Mapped[str | None] = mapped_column(String, nullable=True)
     body: Mapped[str | None] = mapped_column(Text, nullable=True)
