@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.models.keyword import SpamKeyword
+from app.models.email import SpamKeyword
 from app.schemas.keyword import KeywordCreateRequest, KeywordToggleRequest, SpamKeywordResponse
 
 router = APIRouter()
