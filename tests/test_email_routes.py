@@ -82,9 +82,17 @@ def test_list_emails_and_problem_emails() -> None:
         assert emails[0]["body"] == "warn mail body"
         assert emails[0]["received_at"] is not None
 
+        response = client.get("/api/emails", params={"limit": 1, "offset": 1})
+        assert response.status_code == 200
+        assert [email["id"] for email in response.json()] == [2]
+
         response = client.get("/api/emails/problems")
         assert response.status_code == 200
         assert [email["id"] for email in response.json()] == [3, 2]
+
+        response = client.get("/api/emails/problems", params={"limit": 1})
+        assert response.status_code == 200
+        assert [email["id"] for email in response.json()] == [3]
     finally:
         app.dependency_overrides.clear()
 
@@ -168,6 +176,76 @@ def test_batch_analyze_accepts_email_list_and_saves_each_email(monkeypatch) -> N
         assert len(saved) == 2
         assert saved[0].subject == "안내"
         assert saved[1].received_at is not None
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_batch_analyze_rolls_back_when_analysis_fails(monkeypatch) -> None:
+    def fake_analyze_email(
+        self,
+        *,
+        sender: str,
+        subject: str,
+        body: str,
+        attachment_names: list[str],
+        rag_context: str,
+    ) -> dict:
+        if "실패" in body:
+            raise RuntimeError("analysis failed")
+        return {
+            "summary": body,
+            "is_spam": False,
+            "spam_probability": 0.1,
+            "threat_level": "safe",
+            "ai_reason": "테스트 분석 결과입니다.",
+            "security_findings": [],
+        }
+
+    monkeypatch.setattr(GeminiClient, "analyze_email", fake_analyze_email)
+
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    TestingSessionLocal = sessionmaker(
+        bind=engine, autoflush=False, autocommit=False, expire_on_commit=False
+    )
+    Base.metadata.create_all(bind=engine)
+
+    with TestingSessionLocal() as db:
+        db.add(User(id=1, email="user1@example.com", name="User 1"))
+        db.commit()
+
+    def override_get_db() -> Generator[Session, None, None]:
+        with TestingSessionLocal() as db:
+            yield db
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        client = TestClient(app, raise_server_exceptions=False)
+        response = client.post(
+            "/api/emails/analyze/batch",
+            json=[
+                {
+                    "user_id": 1,
+                    "sender": "safe@example.com",
+                    "subject": "안내",
+                    "body": "정상 안내 메일입니다.",
+                },
+                {
+                    "user_id": 1,
+                    "sender": "fail@example.com",
+                    "subject": "실패",
+                    "body": "분석 실패 케이스입니다.",
+                },
+            ],
+        )
+
+        assert response.status_code == 500
+        with TestingSessionLocal() as db:
+            saved = list(db.scalars(select(EmailMessage)))
+        assert saved == []
     finally:
         app.dependency_overrides.clear()
 
@@ -344,18 +422,23 @@ def test_dark_data_detects_stale_mail_and_sensitive_patterns_without_leaking_val
             "주민등록번호 900101-1234567, 카드번호 4111 1111 1111 1111, "
             "계좌 123-456-789012, 인증번호 123456을 포함합니다."
         ),
-        attachment_names=[],
+        attachment_names=["report.pdf", "report.pdf", "report.pdf", "archive.zip"],
         received_at=datetime.now(timezone.utc) - timedelta(days=400),
     )
 
     signals = analyzer._discover_dark_data(payload)
 
     labels = {signal.label for signal in signals}
+    duplicate_signals = [
+        signal for signal in signals if signal.label == "duplicated_attachment"
+    ]
     assert "stale_mail_retention" in labels
     assert "resident_registration_number" in labels
     assert "card_number" in labels
     assert "bank_account_number" in labels
     assert "verification_code" in labels
+    assert len(duplicate_signals) == 1
+    assert "report.pdf" in duplicate_signals[0].detail
     details = " ".join(signal.detail for signal in signals)
     assert "900101-1234567" not in details
     assert "4111 1111 1111 1111" not in details

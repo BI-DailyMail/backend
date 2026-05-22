@@ -1,4 +1,5 @@
 import re
+from collections import Counter
 from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
@@ -28,6 +29,37 @@ class EmailAnalyzer:
         self.gemini_client = GeminiClient()
 
     def analyze(self, payload: EmailAnalyzeRequest) -> EmailAnalyzeResponse:
+        email, response_data = self._prepare_analysis(payload)
+        try:
+            self.db.add(email)
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
+        self.db.refresh(email)
+
+        return self._build_analyze_response(email_id=email.id, **response_data)
+
+    def analyze_many(self, payloads: list[EmailAnalyzeRequest]) -> list[EmailAnalyzeResponse]:
+        analyses = [self._prepare_analysis(payload) for payload in payloads]
+        emails = [email for email, _ in analyses]
+
+        try:
+            self.db.add_all(emails)
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
+
+        for email in emails:
+            self.db.refresh(email)
+
+        return [
+            self._build_analyze_response(email_id=email.id, **response_data)
+            for email, response_data in analyses
+        ]
+
+    def _prepare_analysis(self, payload: EmailAnalyzeRequest) -> tuple[EmailMessage, dict]:
         relevant_context = self.rag_context_retriever.find_relevant_context(payload)
         rag_context = self.rag_context_retriever.format_for_prompt(relevant_context)
         ai_result = self.gemini_client.analyze_email(
@@ -57,23 +89,24 @@ class EmailAnalyzer:
             spam_probability=ai_result["spam_probability"],
             user_id=payload.user_id,
         )
-        self.db.add(email)
-        self.db.commit()
-        self.db.refresh(email)
 
-        return EmailAnalyzeResponse(
-            email_id=email.id,
-            user_id=payload.user_id,
-            summary=summary,
-            schedule_candidates=schedule_candidates,
-            dark_data_signals=dark_data_signals,
-            security_findings=security_findings,
-            threat_level=threat_level,
-            is_spam=ai_result["is_spam"],
-            spam_probability=ai_result["spam_probability"],
-            ai_reason=ai_result["ai_reason"],
-            rag_context_count=len(relevant_context),
-        )
+        return email, {
+            "user_id": payload.user_id,
+            "summary": summary,
+            "schedule_candidates": schedule_candidates,
+            "dark_data_signals": dark_data_signals,
+            "security_findings": security_findings,
+            "threat_level": threat_level,
+            "is_spam": ai_result["is_spam"],
+            "spam_probability": ai_result["spam_probability"],
+            "ai_reason": ai_result["ai_reason"],
+            "rag_context_count": len(relevant_context),
+        }
+
+    def _build_analyze_response(
+        self, *, email_id: int | None, **response_data: object
+    ) -> EmailAnalyzeResponse:
+        return EmailAnalyzeResponse(email_id=email_id, **response_data)
 
     def analyze_body(self, payload: EmailBodyAnalyzeRequest) -> EmailBodyAnalyzeResponse:
         relevant_context = find_matching_baseline(payload.body)
@@ -129,7 +162,7 @@ class EmailAnalyzer:
         signals.extend(self._discover_sensitive_data(payload))
 
         duplicated_names = {
-            name for name in payload.attachment_names if payload.attachment_names.count(name) > 1
+            name for name, count in Counter(payload.attachment_names).items() if count > 1
         }
         for name in sorted(duplicated_names):
             signals.append(

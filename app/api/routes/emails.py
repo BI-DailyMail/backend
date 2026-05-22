@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Body, Depends
+from fastapi import APIRouter, Body, Depends, Query
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
@@ -17,19 +17,31 @@ from app.services.email_analyzer import EmailAnalyzer
 
 router = APIRouter()
 EmailBatchPayload = Annotated[list[EmailAnalyzeRequest], Body(min_length=1, max_length=50)]
+PaginationLimit = Annotated[int, Query(ge=1, le=100)]
+PaginationOffset = Annotated[int, Query(ge=0)]
 
 
 @router.get("", response_model=list[EmailResponse])
-def list_emails(db: Session = Depends(get_db)) -> list[EmailMessage]:
+def list_emails(
+    limit: PaginationLimit = 50,
+    offset: PaginationOffset = 0,
+    db: Session = Depends(get_db),
+) -> list[EmailMessage]:
     return list(
         db.scalars(
             select(EmailMessage).order_by(EmailMessage.created_at.desc(), EmailMessage.id.desc())
+            .limit(limit)
+            .offset(offset)
         )
     )
 
 
 @router.get("/problems", response_model=list[EmailResponse])
-def list_problem_emails(db: Session = Depends(get_db)) -> list[EmailMessage]:
+def list_problem_emails(
+    limit: PaginationLimit = 50,
+    offset: PaginationOffset = 0,
+    db: Session = Depends(get_db),
+) -> list[EmailMessage]:
     return list(
         db.scalars(
             select(EmailMessage)
@@ -42,6 +54,8 @@ def list_problem_emails(db: Session = Depends(get_db)) -> list[EmailMessage]:
                 )
             )
             .order_by(EmailMessage.created_at.desc(), EmailMessage.id.desc())
+            .limit(limit)
+            .offset(offset)
         )
     )
 
@@ -57,7 +71,7 @@ def analyze_email_batch(
     payload: EmailBatchPayload, db: Session = Depends(get_db)
 ) -> list[EmailAnalyzeResponse]:
     analyzer = EmailAnalyzer(db)
-    return [analyzer.analyze(email) for email in payload]
+    return analyzer.analyze_many(payload)
 
 
 @router.post("/analyze/body", response_model=EmailBodyAnalyzeResponse)
