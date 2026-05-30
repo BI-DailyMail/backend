@@ -1,0 +1,271 @@
+[
+  {
+    "category": "credential_theft",
+    "label": "credential_request",
+    "signals": [
+      "비밀번호",
+      "인증번호",
+      "보안코드",
+      "otp",
+      "2fa",
+      "mfa",
+      "계정 확인",
+      "계정 복구",
+      "로그인 정보",
+      "password",
+      "verification code",
+      "security code",
+      "login credentials"
+    ],
+    "risk": "danger",
+    "score": 0.88,
+    "reason": "인증 정보나 로그인 정보를 요구하는 메일은 계정 탈취 목적의 피싱 가능성이 높습니다."
+  },
+  {
+    "category": "account_lockout_impersonation",
+    "label": "account_lockout",
+    "signals": [
+      "계정이 잠겼습니다",
+      "계정 잠김",
+      "비정상적인 접근",
+      "로그인 차단",
+      "보안 위협 감지",
+      "account locked",
+      "unusual sign-in",
+      "suspicious login",
+      "security alert"
+    ],
+    "risk": "danger",
+    "score": 0.84,
+    "reason": "계정 잠김이나 비정상 로그인 경고를 사칭해 사용자를 가짜 복구 페이지로 유도하는 패턴입니다."
+  },
+  {
+    "category": "payment_fraud",
+    "label": "urgent_payment",
+    "signals": [
+      "긴급 송금",
+      "계좌 변경",
+      "변경된 계좌",
+      "입금",
+      "송금",
+      "지급 보류",
+      "미결제",
+      "결제 계좌",
+      "wire transfer",
+      "payment change",
+      "new bank account",
+      "overdue invoice"
+    ],
+    "risk": "danger",
+    "score": 0.86,
+    "reason": "송금 압박이나 계좌 변경 요청은 BEC 또는 스피어피싱에서 자주 나타나는 고위험 패턴입니다."
+  },
+  {
+    "category": "executive_or_vendor_impersonation",
+    "label": "impersonation_pressure",
+    "signals": [
+      "대표님 지시",
+      "임원 지시",
+      "ceo request",
+      "cfo request",
+      "vendor update",
+      "거래처 계좌",
+      "공급업체 정보 변경",
+      "confidential request",
+      "do not call",
+      "전화하지 말고"
+    ],
+    "risk": "danger",
+    "score": 0.83,
+    "reason": "임원이나 거래처를 사칭해 확인 절차를 우회시키는 스피어피싱/BEC 위험 신호입니다."
+  },
+  {
+    "category": "urgency_pressure",
+    "label": "urgency_pressure",
+    "signals": [
+      "긴급",
+      "즉시",
+      "오늘까지",
+      "마감 임박",
+      "제한 시간",
+      "지금 처리",
+      "urgent",
+      "immediately",
+      "final notice",
+      "act now",
+      "within 24 hours"
+    ],
+    "risk": "warn",
+    "score": 0.66,
+    "reason": "긴급성을 강조해 사용자의 판단 시간을 줄이는 표현은 피싱 위험 신호입니다."
+  },
+  {
+    "category": "external_link_pressure",
+    "label": "external_link_pressure",
+    "signals": [
+      "아래 링크",
+      "링크를 클릭",
+      "여기를 클릭",
+      "정보를 입력",
+      "본인 인증",
+      "click here",
+      "verify your account",
+      "confirm your information",
+      "reset your password",
+      "update your details"
+    ],
+    "risk": "warn",
+    "score": 0.72,
+    "reason": "외부 링크 클릭과 정보 입력을 유도하는 메일은 목적지 도메인과 문맥 검증이 필요합니다."
+  },
+  {
+    "category": "shortened_or_obfuscated_url",
+    "label": "obfuscated_link",
+    "signals": [
+      "bit.ly",
+      "tinyurl",
+      "t.co/",
+      "goo.gl",
+      "ow.ly",
+      "cutt.ly",
+      "rebrand.ly",
+      "shorturl",
+      "단축 url",
+      "단축 링크"
+    ],
+    "risk": "warn",
+    "score": 0.76,
+    "reason": "단축 URL은 최종 목적지를 숨겨 피싱 사이트로 유도하는 데 자주 사용됩니다."
+  },
+  {
+    "category": "brand_or_domain_impersonation",
+    "label": "brand_impersonation",
+    "signals": [
+      "secure-kb",
+      "kbbank",
+      "naver-security",
+      "google-security",
+      "microsoft-security",
+      "appleid",
+      "paypal-secure",
+      "bank-secure",
+      "support-login",
+      "verify-login"
+    ],
+    "risk": "danger",
+    "score": 0.82,
+    "reason": "공식 브랜드와 비슷한 문자열을 도메인이나 링크에 섞어 신뢰를 가장하는 패턴입니다."
+  },
+  {
+    "category": "delivery_or_tax_scam",
+    "label": "delivery_tax_scam",
+    "signals": [
+      "택배 반송",
+      "배송 보류",
+      "주소 확인",
+      "통관 수수료",
+      "세금 환급",
+      "국세청 환급",
+      "delivery failed",
+      "shipping fee",
+      "customs fee",
+      "tax refund"
+    ],
+    "risk": "warn",
+    "score": 0.74,
+    "reason": "배송, 통관, 세금 환급을 사칭해 개인정보나 결제 정보를 입력하게 하는 사기 패턴입니다."
+  },
+  {
+    "category": "prize_or_reward_scam",
+    "label": "prize_scam",
+    "signals": [
+      "당첨",
+      "상금",
+      "무료 수령",
+      "이벤트 당첨",
+      "상품권 지급",
+      "수령 가능",
+      "prize",
+      "winner",
+      "reward",
+      "claim now",
+      "gift card"
+    ],
+    "risk": "warn",
+    "score": 0.74,
+    "reason": "당첨이나 무료 수령을 내세워 개인정보나 금융 정보를 요구하는 사기 패턴입니다."
+  },
+  {
+    "category": "suspicious_attachment",
+    "label": "suspicious_attachment",
+    "signals": [
+      ".zip",
+      ".7z",
+      ".rar",
+      ".iso",
+      ".img",
+      ".exe",
+      ".scr",
+      ".js",
+      ".vbs",
+      ".xlsm",
+      ".docm",
+      "매크로",
+      "macro"
+    ],
+    "risk": "warn",
+    "score": 0.78,
+    "reason": "압축 파일, 실행 파일, 매크로 문서는 악성 코드 전달에 악용될 수 있습니다."
+  },
+  {
+    "category": "oauth_consent_phishing",
+    "label": "oauth_consent_phishing",
+    "signals": [
+      "앱 권한",
+      "권한 승인",
+      "메일함 접근",
+      "주소록 접근",
+      "grant access",
+      "approve permissions",
+      "consent required",
+      "oauth",
+      "authorize app"
+    ],
+    "risk": "danger",
+    "score": 0.8,
+    "reason": "OAuth 권한 승인을 유도해 메일함이나 주소록 접근 권한을 탈취하는 패턴입니다."
+  },
+  {
+    "category": "qr_phishing",
+    "label": "qr_phishing",
+    "signals": [
+      "qr 코드",
+      "qr을 스캔",
+      "모바일로 스캔",
+      "scan qr",
+      "qr code",
+      "scan with your phone"
+    ],
+    "risk": "warn",
+    "score": 0.72,
+    "reason": "QR 코드는 URL 검증을 어렵게 만들어 피싱 페이지로 우회시키는 데 사용될 수 있습니다."
+  },
+  {
+    "category": "data_exfiltration_request",
+    "label": "sensitive_data_request",
+    "signals": [
+      "주민등록번호",
+      "계좌번호",
+      "카드번호",
+      "사번",
+      "개인정보 확인",
+      "bank account number",
+      "credit card number",
+      "ssn",
+      "personal information"
+    ],
+    "risk": "danger",
+    "score": 0.86,
+    "reason": "민감 개인정보나 금융 정보를 직접 요구하는 메일은 정보 탈취 가능성이 높습니다."
+  }
+]
